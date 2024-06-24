@@ -2,7 +2,7 @@
 # • present June 24, 2024
 
 rm(list=ls())
-track_name <- 'tracks/track_05.t'
+track_name <- 'tracks/track_10.t'
 
 
 start.time <- Sys.time()
@@ -285,9 +285,22 @@ while (track[car_position[1], car_position[2]] != 'F') {
 						track_subset_scores[i, j] <- euclidean_distance(c(i+next_position[1]-2, j+next_position[2]-2), target)
 					}
 					
+					if (momentum[1] < 0 && i < 3) {
+						track_subset_scores[i, j] %<>% `+`(abs(momentum[1]*runif(1, 2, 4))/(next_position[1])) + (3-i)
+					}
+					if (momentum[1] > 0 && i > 1) {
+						track_subset_scores[i, j] %<>% `+`((momentum[1]*runif(1, 2, 4))/(nrow(track) - next_position[1])) + i
+					}
+					if (momentum[2] < 0 && j < 3) {
+						track_subset_scores[i, j] %<>% `+`(abs(momentum[2]*runif(1, 2, 4))/next_position[2]) + (3-j)
+					}
+					if (momentum[2] > 0 && j > 1) {
+						track_subset_scores[i, j] %<>% `+`((momentum[2]*runif(1, 2, 4))/(ncol(track)/next_position[2])) + j
+					}
+					
 					
 					if (track_subset[i, j] == 'G') {
-						track_subset_scores[i, j] %<>% `*`(2)
+						track_subset_scores[i, j] %<>% `*`(1.2)
 						
 					}
 		
@@ -320,6 +333,17 @@ while (track[car_position[1], car_position[2]] != 'F') {
 		})
 	}
 	
+	# # penalize anyway because it keep crashing
+	# momentum %<>% sapply(\(value) {
+	# 	if (value > 6) {
+	# 		value %<>% `-`(1)
+	# 	} else if (value < 6) {
+	# 		value %<>% `+`(1)
+	# 	} else {
+	# 		value
+	# 	}
+	# })
+	#
 	# update car position
 	car_position <- best_move_absolute
 	
@@ -363,7 +387,10 @@ while (track[car_position[1], car_position[2]] != 'F') {
 }
 cat(Sys.time() - start.time)
 sink("times.txt", append = T)
-writeLines(track_num)
-writeLines(Sys.time() - start.time)
-writeLines('--------------')
+'--------------'
+format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
+track_num
+paste('moves: ', nrow(moves))
+Sys.time() - start.time
+'--------------'
 sink()

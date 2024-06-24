@@ -161,14 +161,14 @@ plot_track <- \(
 		track_plot %<>% { . +
 			# i dont know how x & y got switched up but they did
 			geom_point(data=with_path, aes(x=y, y=x), color = "purple", size = 1) +
-			geom_path(data=with_path, aes(x=y, y=x), color = "purple", size = 1)
+			geom_path(data=with_path, aes(x=y, y=x), color = "purple", linewidth = 1)
 		}
 	}
 	
 	if (!is.null(with_path2)) {
 		track_plot %<>% { . +
 			geom_point(data=with_path2, aes(x=y, y=x), color = "blue", size = 1) +
-			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", size = 1, linetype='dashed')
+			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", linewidth = 1, linetype='dashed')
 		}
 	}
 	
