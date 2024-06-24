@@ -30,11 +30,14 @@ car_position <- which(track == 'S', arr.ind=T) %>% as.integer()
 # where n is the number of finish positions
 finish_positions <- which(track == 'F', arr.ind=T)
 
+path_car <- tibble(x=car_position[1], y=car_position[2])
+path_fin <- tibble(x=integer(), y=integer())
+
 # Create a matrix with the same dimensions as track indicating every cell currently visible
 # from any finish position.
 # When mapping over a list of each finish position & combine their resulting matrices
 # using logical OR.
-visible_fin <- map_matrix(\(x_ind, y_ind) {
+visible_fin <- map_matrix(track, \(x_ind, y_ind) {
 	# same thing as before, except for a list of finish positions
 	map_lgl(nrow(finish_positions), \(finish_position_index) {
 		!check_route_hits(finish_positions[finish_position_index,], c(x_ind, y_ind))
@@ -49,30 +52,84 @@ visible_fin <- map_matrix(\(x_ind, y_ind) {
 
 # do the same,
 # from the cars position
-visible_car <- map_matrix(\(x_ind, y_ind) {
+visible_car <- map_matrix(track, \(x_ind, y_ind) {
 	# acquire a logical scalar of each cell's visibility from the car position
-	!check_route_hits(car_position, c(x_ind, y_ind), block_character='O')
+	!check_route_hits(car_position, c(x_ind, y_ind), hits_what='O')
 })
+# plot_track(with=visible_car)
+# plot_track(with=visible_fin)
 
 
 
 
 
 if (!any(overlap <- visible_car & visible_fin)) {
+	#plot_track(with=overlap)
+	
 	# when there is no overlap between all visible cells
 	# in both from the car's current position & from the finish positions
 	
+	# update visible history for candidate positions
 	visible_history %<>% `|`(visible_car) %>% `|`(visible_fin)
+	# plot_track(with=visible_history)
+
+	
+	# using the visibility matrices, calculate the best candidate position within that
+	# contiguous region
+	candidate_car_positions <- map_matrix(track, \(x_ind, y_ind) {
+		# check positions currently visible to the car
+		visible_car[x_ind, y_ind] &&
+			# but have a desired neighbor that has not been seen before
+			has_neighbor(x_ind, y_ind, 'T', visible_car | visible_history)
+	})
+	#plot_track(with=candidate_car_positions)
+	candidate_finish_positions <- map_matrix(track, \(x_ind, y_ind) {
+		visible_fin[x_ind, y_ind] &&
+			has_neighbor(x_ind, y_ind, 'T', visible_fin | visible_history)
+	})
+	#plot_track(with=candidate_finish_positions)
+	plot_track(with_region=candidate_car_positions | candidate_finish_positions)
+	# find the best pair of candidates
 	
 	
-	# Using the visibility matrices, calculate the best candidate position within that
-	# contiguous region.
+
 	
+	candid_car <- which(candidate_car_positions, arr.ind=T)
+	candid_fin <- which(candidate_finish_positions, arr.ind=T)
+	candidate_distances <- expand.grid(
+		1:nrow(candid_car),
+		1:nrow(candid_fin)
+	) %>%
+		rename(car_row = Var1, fin_row = Var2) %>%
+		mutate(distance = map2_dbl(car_row, fin_row, \(car_row, fin_row) {
+			euclidean_distance(candid_car[car_row,], candid_fin[fin_row,]) +
+				ifelse(
+					has_neighbor(candid_car[car_row,][1], candid_car[car_row,][2], 'G'),
+					runif(1, .5, 1),
+					0
+				) +
+				ifelse(
+					has_neighbor(candid_fin[fin_row,][1], candid_fin[fin_row,][2], 'G'),
+					runif(1, .5, 1),
+					0
+				
+				)
+		}))
 	
+	# update car position & finish position
+	best_row <- slice_min(candidate_distances, distance, n =1)
+	car_position <- best_row$car_row %>% {c(candid_car[., ][[1]], candid_car[.,][[2]])}
+	path_car %<>% add_row(x=car_position[1], y=car_position[2])
+	path_fin %<>% add_row(
+		x = candid_fin[best_row$fin_row,][[1]],
+		y = candid_fin[best_row$fin_row,][[2]]
+	)
 	
+	plot_track(with_path=path_car)
 	
 	
 } else {
+	#plot_region(overlap)
 	# repeat! (TODO: probably wrap in while loop)
 	
 	
@@ -80,58 +137,6 @@ if (!any(overlap <- visible_car & visible_fin)) {
 
 
 
-
-
-
-
-### plotting
-
-plot_region <- \(visible_matrix) {
-	matrix_to_df <- \(matrix, value_name='value') {
-		matrix %>%
-			# format as table
-			as.data.frame(stringsAsFactors=F) %>%
-			# create row column in descending order
-			mutate(row=nrow(.):1) %>%
-			# merge all columns into 1
-			pivot_longer(cols=-row, names_to="column", values_to=value_name) %>%
-			# convert column row to numeric
-			mutate(column=as.numeric(gsub("V", "", column)))
-	}
-	
-	track_df <- track %>% matrix_to_df('type')
-	
-	track_visible_df <- visible_matrix %>% matrix_to_df('visible')
-	
-	# Define the color mapping
-	color_mapping <- c(
-		"O" = "brown",
-		"T" = "gray",
-		"G" = "green",
-		"S" = "yellow",
-		"F" = "white"
-	)
-	
-	ggplot() +
-		geom_tile(data=track_df, mapping=aes(x=column, y=row, fill=type), color="black") +
-		scale_fill_manual(values = color_mapping) +
-		geom_point(
-			data = track_visible_df,
-			mapping = aes(x=column, y=row, color=ifelse(visible, "green", "red")),
-			size = 3,
-			alpha = .5
-		) +
-		theme_minimal() +
-		theme(
-			axis.text = element_blank(),
-			axis.ticks = element_blank(),
-			axis.title = element_blank(),
-			legend.title = element_blank()
-		) +
-		coord_fixed()
-}
-
-plot_region(convergence)
 
 
 

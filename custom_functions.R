@@ -1,4 +1,4 @@
-check_route_hits <- \(from, to, block_character='O', min_resolution=50) {
+check_route_hits <- \(from, to, hits_what='O', min_resolution=50) {
 	#' Given a start and end point, check if the route encounters the block_character.
 	#' The resolution determines how many points are drawn between the start & end points,
 	#' which means that a returned negative could be a false negative.
@@ -23,7 +23,7 @@ check_route_hits <- \(from, to, block_character='O', min_resolution=50) {
 	route_logical <- map2_lgl(
 		range_x,
 		range_y,
-		\(x, y) track[round(x), round(y)] == block_character
+		\(x, y) track[round(x), round(y)] == hits_what
 	)
 	
 	# return if any true value is present in the vector
@@ -32,19 +32,17 @@ check_route_hits <- \(from, to, block_character='O', min_resolution=50) {
 }
 
 
-map_matrix <- \(func) {
+map_matrix <- \(input_matrix, custom_function) {
 	#' maps a logical function to each cell's index in the dimensions of the track matrix
 	#' @usage is_G <- map_matrix(\(x_ind, y_ind) track[x_ind, y_ind] == 'G')
 	
 	map2(
-		row(track),
-		col(track),
-		\(x_index, y_index) {
-			func(x_index, y_index)
-		}
+		row(input_matrix),
+		col(input_matrix),
+		\(x_index, y_index) custom_function(x_index, y_index)
 	) %>%
 		as.logical() %>%
-		matrix(unlist(.), nrow = nrow(track), ncol = ncol(track)) -> test
+		matrix(unlist(.), nrow = nrow(input_matrix), ncol = ncol(input_matrix))
 }
 
 
@@ -76,5 +74,112 @@ plot_logical_matrix <- \(logical_matrix) {
 }
 
 
+plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
+	#' plot a logical matrix onto the current track
+	
+	matrix_to_df <- \(input_matrix, value_name='value') {
+		input_matrix %>%
+			# format as table
+			as.data.frame(stringsAsFactors=F) %>%
+			# create row column in descending order
+			mutate(row=nrow(.):1) %>%
+			# merge all columns into 1
+			pivot_longer(cols=-row, names_to="column", values_to=value_name) %>%
+			# convert column row to numeric
+			mutate(column=as.numeric(gsub("V", "", column)))
+	}
+	
+	track_df <- track %>% matrix_to_df('type')
+	
+	if (!is.null(with_region)) {
+		track_visible_df <- with_region %>% matrix_to_df('visible')
+	}
+	
+	if (!is.null(with_path)) {
+		# adjust the row values to match the coordinate system of the plot
+		with_path$x <- nrow(track) - with_path$x + 1
+	}
+	
+	if (!is.null(with_path2)) {
+		with_path2$x <- nrow(track) - with_path2$x + 1
+	}
+	# not going straight
+	
+	track_plot <- ggplot() +
+		geom_tile(data=track_df, mapping=aes(x=column, y=row, fill=type), color="black") +
+		scale_fill_manual(values = c(
+			"O" = "brown",
+			"T" = "gray",
+			"G" = "green",
+			"S" = "yellow",
+			"F" = "white"
+		)) +
+		theme_minimal() +
+		theme(
+			axis.text = element_blank(),
+			axis.ticks = element_blank(),
+			axis.title = element_blank(),
+			legend.title = element_blank(),
+			legend.position = "none"
+		) +
+		coord_fixed()
+		
+	
+	if (!is.null(with_region)) {
+		track_plot %<>% `+`(geom_point(
+			data = track_visible_df,
+			mapping = aes(x=column, y=row, alpha=ifelse(visible, .4, 0)),
+			fill = 'white',
+			size = 2,
+		))
+	}
+	
+	if (!is.null(with_path)) {
+		track_plot %<>% { . +
+			geom_point(data=with_path, aes(x=x, y=y), color = "purple", size = 3) +
+			geom_path(data=with_path, aes(x=x, y=y), color = "blue", size = 1)
+		}
+	}
+	
+	
+	if (!is.null(with_path2)) {
+		track_plot %<>% { . +
+			geom_point(data=with_path2, aes(x=x, y=y), color = "purple", size = 3) +
+			geom_path(data=with_path2, aes(x=x, y=y), color = "blue", size = 1)
+		}
+	}
+	
+	track_plot
+}
 
 
+get_subset <- \(input_matrix, x_coordinate, y_coordinate, pad=1) {
+	#' return a square matrix 'window' with values surrounding a specific coordinate
+	input_matrix[
+		(x_coordinate-pad):(x_coordinate+pad), # x
+		(y_coordinate-pad):(y_coordinate+pad)  # y
+	]
+}
+
+has_neighbor <- \(
+	x_center,
+	y_center,
+	has_what,
+	invisible_from = matrix(F, nrow=nrow(track), ncol=ncol(track))
+) {
+	#' check if a cell in the matrix has a certain type of neighbor
+	#' & is visible in the visibility matrix
+	subset_track <- get_subset(track, x_center, y_center)
+	subset_visibility <- get_subset(invisible_from, x_center, y_center)
+	
+	track_subset_elgible <- map_matrix(subset_track, \(x_subset, y_subset) {
+		!subset_visibility[x_subset, y_subset] && subset_track[x_subset, y_subset] == has_what
+	})
+	
+	any(track_subset_elgible)
+}
+
+# to calculate scores (distance from finish) for each possible move
+euclidean_distance <- \(from, to) {
+	sqrt((from[1] - to[1])^2 + (from[2] - to[2])^2)
+}
