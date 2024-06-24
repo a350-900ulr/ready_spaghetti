@@ -1,7 +1,8 @@
 # Implement a metaheuristic-based approach
 # • present June 24, 2024
 
-track_name <- 'tracks/track_02.t'
+rm(list=ls())
+track_name <- 'tracks/track_06.t'
 
 source('custom_functions.R')
 pacman::p_load(
@@ -13,6 +14,15 @@ pacman::p_load(
 	dplyr, # mutate
 	tidyr # pivot_longer
 )
+
+track_num <- track_name %>%
+	strsplit('/') %>%
+	.[[1]] %>%
+	gsub('.t', '', .) %>%
+	.[2]
+output_folder <- track_num %>%
+	paste0('output/', ., '/')
+
 
 # load track in as a character matrix
 track <- track_name %>%
@@ -44,6 +54,7 @@ visible_fin <- map_matrix(track, \(x_ind, y_ind) {
 	})
 })
 
+step_counter <- 1
 
 
 
@@ -56,22 +67,18 @@ visible_car <- map_matrix(track, \(x_ind, y_ind) {
 	# acquire a logical scalar of each cell's visibility from the car position
 	!check_route_hits(car_position, c(x_ind, y_ind), hits_what='O')
 })
-# plot_track(with=visible_car)
-# plot_track(with=visible_fin)
+# plot_track(with_region=visible_car)
+# plot_track(with_region=visible_fin)
 
 
+while (!any(overlap <- visible_car & visible_fin)) {
 
-
-
-if (!any(overlap <- visible_car & visible_fin)) {
-	#plot_track(with=overlap)
-	
 	# when there is no overlap between all visible cells
 	# in both from the car's current position & from the finish positions
 	
 	# update visible history for candidate positions
 	visible_history %<>% `|`(visible_car) %>% `|`(visible_fin)
-	# plot_track(with=visible_history)
+	# plot_track(with_region=visible_history)
 
 	
 	# using the visibility matrices, calculate the best candidate position within that
@@ -82,20 +89,22 @@ if (!any(overlap <- visible_car & visible_fin)) {
 			# but have a desired neighbor that has not been seen before
 			has_neighbor(x_ind, y_ind, 'T', visible_car | visible_history)
 	})
-	#plot_track(with=candidate_car_positions)
 	candidate_finish_positions <- map_matrix(track, \(x_ind, y_ind) {
 		visible_fin[x_ind, y_ind] &&
 			has_neighbor(x_ind, y_ind, 'T', visible_fin | visible_history)
 	})
-	#plot_track(with=candidate_finish_positions)
-	plot_track(with_region=candidate_car_positions | candidate_finish_positions)
+	
+	save_plot(with_region=candidate_car_positions, with_region2=candidate_finish_positions, tag='candidates')
+	step_counter %<>% `+`(1)
 	# find the best pair of candidates
 	
 	
 
-	
+	# get coordinates of all candidate positions
 	candid_car <- which(candidate_car_positions, arr.ind=T)
 	candid_fin <- which(candidate_finish_positions, arr.ind=T)
+	
+	# go through every combination of them to calculate the distances
 	candidate_distances <- expand.grid(
 		1:nrow(candid_car),
 		1:nrow(candid_fin)
@@ -103,50 +112,124 @@ if (!any(overlap <- visible_car & visible_fin)) {
 		rename(car_row = Var1, fin_row = Var2) %>%
 		mutate(distance = map2_dbl(car_row, fin_row, \(car_row, fin_row) {
 			euclidean_distance(candid_car[car_row,], candid_fin[fin_row,]) +
+				# penalize if the candidate is near grass
 				ifelse(
 					has_neighbor(candid_car[car_row,][1], candid_car[car_row,][2], 'G'),
-					runif(1, .5, 1),
+					runif(1, 2, 4),
 					0
 				) +
 				ifelse(
 					has_neighbor(candid_fin[fin_row,][1], candid_fin[fin_row,][2], 'G'),
-					runif(1, .5, 1),
+					runif(1, 2, 4),
 					0
 				
 				)
 		}))
 	
 	# update car position & finish position
-	best_row <- slice_min(candidate_distances, distance, n =1)
-	car_position <- best_row$car_row %>% {c(candid_car[., ][[1]], candid_car[.,][[2]])}
+	best_row <- slice_min(candidate_distances, distance, n=1)
+	car_position <- best_row$car_row %>% {c(candid_car[., ][[1]], candid_car[., ][[2]])}
+	fin_position <- best_row$fin_row %>% {c(candid_fin[., ][[1]], candid_fin[., ][[2]])}
 	path_car %<>% add_row(x=car_position[1], y=car_position[2])
-	path_fin %<>% add_row(
-		x = candid_fin[best_row$fin_row,][[1]],
-		y = candid_fin[best_row$fin_row,][[2]]
-	)
+	path_fin %<>% add_row(x = fin_position[1], y = fin_position[2])
 	
-	plot_track(
+	#plot_track(with_region=overlap)
+	save_plot(
 		with_region = candidate_car_positions | candidate_finish_positions,
+		with_region2 = overlap,
 		with_path = path_car,
-		with_path2 = path_fin
+		with_path2 = path_fin,
+		tag = 'everything'
 	)
+	step_counter %<>% `+`(1)
 	
 	
-} else {
-	#plot_region(overlap)
-	# repeat! (TODO: probably wrap in while loop)
+	# recalculate whats visible
+	visible_car <- map_matrix(track, \(x_ind, y_ind) {
+		# acquire a logical scalar of each cell's visibility from the car position
+		!check_route_hits(car_position, c(x_ind, y_ind), hits_what='O')
+	})
 	
+	visible_fin <- map_matrix(track, \(x_ind, y_ind) {
+		!check_route_hits(fin_position, c(x_ind, y_ind), hits_what='O')
+	})
+	
+
 	
 }
 
+save_plot(
+	with_region = overlap,
+	tag = 'overlap'
+)
+step_counter %<>% `+`(1)
+
+# if there is overlap check if the car can be immeidately
+# connected to the finish, meaning that the finish position
+# is visible from the car's current position
+
+# for simplicity however, a single finish position value needs to be generated
+if (!exists('fin_position')) {
+	fin_distances <- map_matrix(visible_fin, \(x_ind, y_ind) {
+		if (visible_fin[x_ind, y_ind]) {
+			euclidean_distance(car_position, c(x_ind, y_ind)) +
+				ifelse(
+					has_neighbor(x_ind, y_ind, 'G'),
+					runif(1, 2, 5),
+					0
+				)
+		} else {
+			nrow(track) * ncol(track)
+		}
+	}, type_function=as.double)
+	
+	fin_position <- which(fin_distances == min(fin_distances), arr.ind=T)[1,] %>% as.integer()
+	path_fin %<>% add_row(x=fin_position[1], y=fin_position[2])
+	#plot_track(with_path=tibble(x=fin_position[1], y=fin_position[2]))
+}
+
+if (!visible_car[fin_position[1], fin_position[2]]) {
+	
+	# if not, we simply find a nice midpoint to connect them
+	
+	# overlap_distances <- map_matrix(overlap, \(x_ind, y_ind) {
+	# 	if (
+	# 		overlap[x_ind, y_ind] &&
+	# 		!check_route_hits(car_position, c(x_ind, y_ind)) &&
+	# 		!check_route_hits(fin_position, c(x_ind, y_ind))
+	# 	) {
+	# 		#print(paste('\nsuccess (', x_ind, y_ind, ')--', distance_val))
+	# 		euclidean_distance(car_position, c(x_ind, y_ind)) +
+	# 			euclidean_distance(fin_position, c(x_ind, y_ind)) +
+	# 			# penalize if this point is in the grass
+	# 			ifelse(
+	# 				has_neighbor(x_ind, y_ind, 'G'),
+	# 				runif(1, 1, 2),
+	# 				0
+	# 			)
+	#
+	# 	} else {
+	# 		nrow(track) * ncol(track)
+	# 	}
+	# }, type_function=as.double)
+	#
+	# connector <- which(overlap_distances == min(overlap_distances), arr.ind=T)[1,] %>%
+	# 	as.integer()
+	#
+	
+	connector <- which(overlap, arr.ind=T)[1, ] %>% as.integer()
 
 
+	path_car %<>% add_row(x=connector[1], y=connector[2])
+	save_plot(with_path=path_car, with_path2=path_fin, tag='connected')
+	step_counter %<>% `+`(1)
+}
+
+path_car %<>% rbind(path_fin %>% map_df(rev))
 
 
-
-
-
-
+save_plot(with_path=path_car, tag='finished')
+step_counter %<>% `+`(1)
 
 
 

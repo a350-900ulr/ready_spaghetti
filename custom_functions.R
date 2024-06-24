@@ -1,4 +1,4 @@
-check_route_hits <- \(from, to, hits_what='O', min_resolution=50) {
+check_route_hits <- \(from, to, hits_what='O', min_resolution=100) {
 	#' Given a start and end point, check if the route encounters the block_character.
 	#' The resolution determines how many points are drawn between the start & end points,
 	#' which means that a returned negative could be a false negative.
@@ -7,7 +7,7 @@ check_route_hits <- \(from, to, hits_what='O', min_resolution=50) {
 	# calculate the resolution of the route by
 	resolution <- abs(from - to) %>%
 		# adding the x & y distances together
-		sum() %>%
+		prod() %>%
 		# multiplying randomly between 1.5 & 2
 		`*`(runif(1, 1.5, 2)) %>%
 		# round to integer
@@ -32,16 +32,16 @@ check_route_hits <- \(from, to, hits_what='O', min_resolution=50) {
 }
 
 
-map_matrix <- \(input_matrix, custom_function) {
+map_matrix <- \(input_matrix, custom_function, type_function=as.logical) {
 	#' maps a logical function to each cell's index in the dimensions of the track matrix
 	#' @usage is_G <- map_matrix(\(x_ind, y_ind) track[x_ind, y_ind] == 'G')
 	
-	map2(
+	outputs <- map2(
 		row(input_matrix),
 		col(input_matrix),
 		\(x_index, y_index) custom_function(x_index, y_index)
 	) %>%
-		as.logical() %>%
+		type_function() %>%
 		matrix(unlist(.), nrow = nrow(input_matrix), ncol = ncol(input_matrix))
 }
 
@@ -53,7 +53,7 @@ plot_logical_matrix <- \(logical_matrix) {
 	logical_matrix %>%
 		as.data.frame() %>%
 		# take all calls
-		pivot_longer(cols=1:ncol(.), names_to='x', values_to="fill") %>%
+		pivot_longer(cols=1:ncol(.), names_to='x', values_to='fill') %>%
 		mutate(x=as.numeric(gsub("V", "", x))) %>%
 		mutate(y =
 			map(
@@ -74,7 +74,13 @@ plot_logical_matrix <- \(logical_matrix) {
 }
 
 
-plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
+plot_track <- \(
+	with_region = NULL,
+	with_region2 = NULL,
+	with_path = NULL,
+	with_path2 = NULL,
+	title=''
+) {
 	#' plot a logical matrix onto the current track
 	
 	matrix_to_df <- \(input_matrix, value_name='value') {
@@ -93,6 +99,10 @@ plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
 	
 	if (!is.null(with_region)) {
 		track_visible_df <- with_region %>% matrix_to_df('visible')
+	}
+	
+	if (!is.null(with_region2)) {
+		track_visible_df2 <- with_region2 %>% matrix_to_df('visible')
 	}
 	
 	if (!is.null(with_path)) {
@@ -120,17 +130,29 @@ plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
 			axis.ticks = element_blank(),
 			axis.title = element_blank(),
 			legend.title = element_blank(),
-			legend.position = "none"
+			legend.position = "none",
 		) +
-		coord_fixed()
+		coord_fixed() +
+		ggtitle(title)
 		
 	
 	if (!is.null(with_region)) {
 		track_plot %<>% `+`(geom_point(
 			data = track_visible_df,
-			mapping = aes(x=column, y=row, alpha=ifelse(visible, .4, 0)),
-			fill = 'white',
-			size = 2,
+			mapping = aes(x=column, y=row, alpha=visible),
+			color = '#FF00FF',
+			size = 4,
+			shape = 1
+		))
+	}
+	
+	if (!is.null(with_region2)) {
+		track_plot %<>% `+`(geom_point(
+			data = track_visible_df2,
+			mapping = aes(x=column, y=row, alpha=visible),
+			color = 'orange',
+			size = 3,
+			shape = 18
 		))
 	}
 	
@@ -144,7 +166,7 @@ plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
 	
 	if (!is.null(with_path2)) {
 		track_plot %<>% { . +
-			geom_point(data=with_path2, aes(x=y, y=x), color = "purple", size = 3) +
+			geom_point(data=with_path2, aes(x=y, y=x), color = "purple", size = 1) +
 			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", size = 1)
 		}
 	}
@@ -182,4 +204,15 @@ has_neighbor <- \(
 # to calculate scores (distance from finish) for each possible move
 euclidean_distance <- \(from, to) {
 	sqrt((from[1] - to[1])^2 + (from[2] - to[2])^2)
+}
+
+save_plot <- \(with_region=NULL, with_region2=NULL, with_path=NULL, with_path2=NULL, tag='') {
+	plot_track(
+		with_region = with_region,
+		with_region2 = with_region2,
+		with_path = with_path,
+		with_path2 = with_path2,
+		title = paste(track_num, 'step', step_counter, ':', tag, '\n', format(Sys.time(), "%Y-%m-%d_%H-%M-%S"))
+	) %>%
+		ggsave(paste0(output_folder, 'step', step_counter, '.png'), ., create.dir = T)
 }
