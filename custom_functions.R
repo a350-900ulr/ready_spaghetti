@@ -77,8 +77,8 @@ plot_logical_matrix <- \(logical_matrix) {
 plot_track <- \(
 	with_region = NULL,
 	with_region2 = NULL,
-	with_path = NULL,
-	with_path2 = NULL,
+	with_path = path_car,
+	with_path2,
 	title=''
 ) {
 	#' plot a logical matrix onto the current track
@@ -159,7 +159,7 @@ plot_track <- \(
 	if (!is.null(with_path)) {
 		track_plot %<>% { . +
 			# i dont know how x & y got switched up but they did
-			geom_point(data=with_path, aes(x=y, y=x), color = "purple", size = 3) +
+			geom_point(data=with_path, aes(x=y, y=x), color = "purple", size = 1) +
 			geom_path(data=with_path, aes(x=y, y=x), color = "blue", size = 1)
 		}
 	}
@@ -167,7 +167,7 @@ plot_track <- \(
 	if (!is.null(with_path2)) {
 		track_plot %<>% { . +
 			geom_point(data=with_path2, aes(x=y, y=x), color = "purple", size = 1) +
-			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", size = 1)
+			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", size = 1, linetype='dashed')
 		}
 	}
 	

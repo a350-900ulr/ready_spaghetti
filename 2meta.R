@@ -2,7 +2,7 @@
 # • present June 24, 2024
 
 rm(list=ls())
-track_name <- 'tracks/track_06.t'
+track_name <- 'tracks/track_01.t'
 
 source('custom_functions.R')
 pacman::p_load(
@@ -30,6 +30,10 @@ track <- track_name %>%
 	strsplit('') %>%
 	do.call(rbind, .)
 
+
+step_counter <- 1
+
+
 # create a logical matrix that holds every position that has been viewed,
 # to prevent it from considering those positions again
 visible_history <- matrix(F, nrow=nrow(track), ncol=ncol(track))
@@ -44,6 +48,13 @@ path_car <- tibble(x=car_position[1], y=car_position[2])
 path_fin <- tibble(x=integer(), y=integer())
 
 # Create a matrix with the same dimensions as track indicating every cell currently visible
+# from the cars position
+visible_car <- map_matrix(track, \(x_ind, y_ind) {
+	# acquire a logical scalar of each cell's visibility from the car position
+	!check_route_hits(car_position, c(x_ind, y_ind), hits_what='O')
+})
+save_plot(with_region=visible_car, tag='car visibility')
+step_counter %<>% `+`(1)
 # from any finish position.
 # When mapping over a list of each finish position & combine their resulting matrices
 # using logical OR.
@@ -53,8 +64,9 @@ visible_fin <- map_matrix(track, \(x_ind, y_ind) {
 		!check_route_hits(finish_positions[finish_position_index,], c(x_ind, y_ind))
 	})
 })
+save_plot(with_region=visible_fin, tag='finish visibility')
+step_counter %<>% `+`(1)
 
-step_counter <- 1
 
 
 
@@ -62,12 +74,7 @@ step_counter <- 1
 
 
 # do the same,
-# from the cars position
-visible_car <- map_matrix(track, \(x_ind, y_ind) {
-	# acquire a logical scalar of each cell's visibility from the car position
-	!check_route_hits(car_position, c(x_ind, y_ind), hits_what='O')
-})
-# plot_track(with_region=visible_car)
+
 # plot_track(with_region=visible_fin)
 
 
@@ -179,13 +186,14 @@ if (!exists('fin_position')) {
 					0
 				)
 		} else {
-			nrow(track) * ncol(track)
+			length(track)
 		}
 	}, type_function=as.double)
 	
 	fin_position <- which(fin_distances == min(fin_distances), arr.ind=T)[1,] %>% as.integer()
 	path_fin %<>% add_row(x=fin_position[1], y=fin_position[2])
-	#plot_track(with_path=tibble(x=fin_position[1], y=fin_position[2]))
+	save_plot(with_path2=tibble(x=fin_position[1], y=fin_position[2]), tag='extend finish position')
+	step_counter %<>% `+`(1)
 }
 
 if (!visible_car[fin_position[1], fin_position[2]]) {
@@ -236,4 +244,107 @@ step_counter %<>% `+`(1)
 
 
 
+# table for moves
+moves <- path_car[1,]
+track_traversed <- matrix(F, nrow=nrow(track), ncol=ncol(track))
+track_traversed[moves[1,][1] %>% as.integer(), moves[1,][2] %>% as.integer()] <- T
+momentum <- c(0, 0) # initial momentum
+momentums <- tibble(x=momentum[1], y=momentum[2])
 
+path_index <- 2
+target <- path_car[path_index,] %>% as.integer()
+
+
+
+while (track[car_position[1], car_position[2]] != 'F') {
+	next_position <- car_position + momentum
+	
+	track_subset <- get_subset(track, next_position[1], next_position[2])
+	track_subset_scores <- matrix(length(track), nrow=3, ncol=3)
+	# i <- 3; j <- 1
+	for (i in 1:3) {
+		for (j in 1:3) {
+			traversed <- track_traversed[i+next_position[1]-2, j+next_position[2]-2]
+			if (track_subset[i, j] != 'O' && !traversed) {
+				# before calculating its score, check if the path to it is blocked
+				if (!check_route_hits(car_position, c(i+next_position[1]-2, j+next_position[2]-2), 'O')) {
+					
+					
+					distances <- apply(finish_positions, 1, \(target) {
+						euclidean_distance(c(next_position[1] + i - 2, next_position[2] + j - 2), target)
+					})
+					
+					track_subset_scores[i, j] <- min(distances)
+					if (track_subset[i, j] == 'G') {
+						track_subset_scores[i, j] %<>% `*`(2)
+						
+					}
+					
+		
+					
+				}
+			}
+		}
+	}; rm(i, j)
+	
+	best_move_relative <-
+		which(track_subset_scores == min(track_subset_scores), arr.ind=T) %>%
+			.[1,] %>%
+			as.vector()
+	best_move_absolute <- best_move_relative + next_position - 2
+	
+	# update momentum
+	momentum %<>% `+`(best_move_relative - 2)
+	momentums %<>% add_row(x=momentum[1], y=momentum[2])
+	
+	# check if move went through grass & penalize momentum
+	if (check_route_hits(car_position, best_move_absolute, hits_what ='G')) {
+		momentum %<>% sapply(\(value) {
+			if (value > 0) {
+				value %<>% `-`(1)
+			} else if (value < 0) {
+				value %<>% `+`(1)
+			} else {
+				value
+			}
+		})
+	}
+	
+	# update car position
+	car_position <- best_move_absolute
+	
+	# update track_traversed positions
+	track_traversed[car_position[1], car_position[2]] <- T
+	
+	# record move
+	moves %<>% add_row(x=best_move_absolute[1], y=best_move_absolute[2])
+	
+	save_plot(with_path=moves, tag='moving')
+	step_counter %<>% `+`(1)
+	# check if any finish lines are in sight
+	visible_fin <- map_matrix(track, \(x_ind, y_ind) {
+		# same thing as before, except for a list of finish positions
+		map_lgl(nrow(finish_positions), \(finish_position_index) {
+			!check_route_hits(finish_positions[finish_position_index,], c(x_ind, y_ind))
+		})
+	})
+	
+	if (any(visible_fin)) {
+		# if so, update target
+		target <- which(visible_fin, arr.ind=T)[1,] %>% as.integer()
+	} else { # look for the next target in guide path
+		visible_car <- map_matrix(track, \(x_ind, y_ind) {
+			# acquire a logical scalar of each cell's visibility from the car position
+			!check_route_hits(car_position, c(x_ind, y_ind), hits_what='O')
+		})
+		
+		next_path_goal <- path_car[path_index+1,] %>% as.integer()
+		
+		if (visible_car[next_path_goal[1], next_path_goal[2]]) {
+			target <- next_path_goal
+			path_index %<>% `+`(1)
+		}
+	}
+	
+	
+}
