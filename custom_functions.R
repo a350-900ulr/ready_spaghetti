@@ -99,7 +99,7 @@ plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
 		# adjust the row values to match the coordinate system of the plot
 		with_path$x <- nrow(track) - with_path$x + 1
 	}
-	
+
 	if (!is.null(with_path2)) {
 		with_path2$x <- nrow(track) - with_path2$x + 1
 	}
@@ -136,16 +136,16 @@ plot_track <- \(with_region=NULL, with_path=NULL, with_path2=NULL) {
 	
 	if (!is.null(with_path)) {
 		track_plot %<>% { . +
-			geom_point(data=with_path, aes(x=x, y=y), color = "purple", size = 3) +
-			geom_path(data=with_path, aes(x=x, y=y), color = "blue", size = 1)
+			# i dont know how x & y got switched up but they did
+			geom_point(data=with_path, aes(x=y, y=x), color = "purple", size = 3) +
+			geom_path(data=with_path, aes(x=y, y=x), color = "blue", size = 1)
 		}
 	}
 	
-	
 	if (!is.null(with_path2)) {
 		track_plot %<>% { . +
-			geom_point(data=with_path2, aes(x=x, y=y), color = "purple", size = 3) +
-			geom_path(data=with_path2, aes(x=x, y=y), color = "blue", size = 1)
+			geom_point(data=with_path2, aes(x=y, y=x), color = "purple", size = 3) +
+			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", size = 1)
 		}
 	}
 	

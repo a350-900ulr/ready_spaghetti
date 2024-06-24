@@ -125,7 +125,11 @@ if (!any(overlap <- visible_car & visible_fin)) {
 		y = candid_fin[best_row$fin_row,][[2]]
 	)
 	
-	plot_track(with_path=path_car)
+	plot_track(
+		with_region = candidate_car_positions | candidate_finish_positions,
+		with_path = path_car,
+		with_path2 = path_fin
+	)
 	
 	
 } else {
