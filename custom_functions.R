@@ -78,7 +78,7 @@ plot_track <- \(
 	with_region = NULL,
 	with_region2 = NULL,
 	with_path = path_car,
-	with_path2,
+	with_path2 = NULL,
 	title=''
 ) {
 	#' plot a logical matrix onto the current track
@@ -134,6 +134,7 @@ plot_track <- \(
 		) +
 		coord_fixed() +
 		ggtitle(title)
+		#geom_text(data=track_df, aes(x=column, y=row, label=paste(nrow(track)-row+1, column)), color="black", size=2, vjust=0.5, hjust=0.5)
 		
 	
 	if (!is.null(with_region)) {
@@ -160,13 +161,13 @@ plot_track <- \(
 		track_plot %<>% { . +
 			# i dont know how x & y got switched up but they did
 			geom_point(data=with_path, aes(x=y, y=x), color = "purple", size = 1) +
-			geom_path(data=with_path, aes(x=y, y=x), color = "blue", size = 1)
+			geom_path(data=with_path, aes(x=y, y=x), color = "purple", size = 1)
 		}
 	}
 	
 	if (!is.null(with_path2)) {
 		track_plot %<>% { . +
-			geom_point(data=with_path2, aes(x=y, y=x), color = "purple", size = 1) +
+			geom_point(data=with_path2, aes(x=y, y=x), color = "blue", size = 1) +
 			geom_path(data=with_path2, aes(x=y, y=x), color = "blue", size = 1, linetype='dashed')
 		}
 	}
