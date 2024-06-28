@@ -1,8 +1,8 @@
 # Implement a metaheuristic-based approach
-# • present June 24, 2024
+# • presented June 24, 2024
 
 rm(list=ls())
-track_name <- 'tracks/track_10.t'
+track_name <- 'tracks/track_10'
 
 
 start.time <- Sys.time()
@@ -246,7 +246,7 @@ step_counter %<>% `+`(1)
 
 
 ### actually do route
-
+# TODO: look ahead collision avoidance system
 
 
 # table for moves
@@ -267,6 +267,7 @@ while (track[car_position[1], car_position[2]] != 'F') {
 	
 	track_subset <- get_subset(track, next_position[1], next_position[2])
 	track_subset_scores <- matrix(length(track), nrow=3, ncol=3)
+	# TODO: dont use a for loop
 	# i <- 1; j <- 3
 	for (i in 1:3) {
 		for (j in 1:3) {

@@ -1,4 +1,4 @@
-<sub><sup>a soon to be</sup></sub>
+<sub><sup>a soon fully functional to be</sup></sub>
 # meta-heuristic router 
 
 ## Structure
@@ -13,4 +13,4 @@ implementation of routing through a grid-like track; a character matrix track w/
   * )
 
 ## Usage
-slow down there idk yet either
+just run all of 2meta.R, which will generated image files of the corresponding moves
